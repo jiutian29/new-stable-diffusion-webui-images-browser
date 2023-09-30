@@ -10,10 +10,6 @@ div[id^="image_browser_tab"][id$="image_browser_gallery"].hide_loading > .svelte
   display: none;
 }
 
-.image_browser_gallery img {
-  object-fit: scale-down !important;
-}
-
 /* hack to fix the alignment of the page index, refresh, and delete buttons*/
 div[id$='_control_image_browser_page_index'] {
   margin-top: -20px !important;
@@ -27,14 +23,6 @@ button[id$='_control_image_browser_refresh_index']{
 }
 button[id$='_image_browser_del_img_btn'] {
   margin-top: calc(var(--body-text-size) * var(--line-sm));
-}
-
-/* Workaround until gradio version is updated to a version that fixes it
-   see https://github.com/gradio-app/gradio/issues/1590
-*/
-#tab_image_browser .thumbnail-item > img {
-  width: auto !important;
-  height: auto !important;
 }
 
 #tab_image_browser .no-gap-top {
