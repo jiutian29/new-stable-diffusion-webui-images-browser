@@ -25,7 +25,7 @@ from modules import paths, shared, script_callbacks, scripts, images
 from modules.shared import opts, cmd_opts
 from modules.ui_common import plaintext_to_html
 from modules.ui_components import ToolButton, DropdownMulti
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError, ImageDraw
 from packaging import version
 from pathlib import Path
 from typing import List, Tuple
@@ -42,8 +42,15 @@ try:
     from send2trash import send2trash
     send2trash_installed = True
 except ImportError:
-    print("Image Browser: send2trash is not installed. recycle bin cannot be used.")
+    print("Image Browser: send2trash is not installed. Recycle bin cannot be used.")
     send2trash_installed = False
+
+try:
+    import cv2
+    opencv_installed = True
+except ImportError:
+    print("Image Browser: opencv is not installed. Video related actions cannot be performed.")
+    opencv_installed = False
 
 # Force reload wib_db, as it doesn't get reloaded otherwise, if an extension update is started from webui
 importlib.reload(wib_db)
@@ -55,6 +62,9 @@ components_list = ["Sort by", "Filename keyword search", "EXIF keyword search", 
 num_of_imgs_per_page = 0
 loads_files_num = 0
 image_ext_list = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".svg"]
+video_ext_list = [".mp4", ".mov", ".avi", ".wmv", ".flv", ".mkv", ".webm", ".mpeg", ".mpg", ".3gp", ".ogv", ".m4v"]
+if not opencv_installed:
+    video_ext_list = []
 exif_cache = {}
 aes_cache = {}
 none_select = "Nothing selected"
@@ -63,6 +73,7 @@ up_symbol = '\U000025b2'  # ▲
 down_symbol = '\U000025bc'  # ▼
 caution_symbol = '\U000026a0'  # ⚠
 folder_symbol = '\U0001f4c2'  # 📂
+play_symbol = '\U000023f5'  # ⏵
 current_depth = 0
 init = True
 copy_move = ["Move", "Copy"]
@@ -72,6 +83,7 @@ openoutpaint = False
 controlnet = False
 js_dummy_return = None
 log_file = os.path.join(scripts.basedir(), "image_browser.log")
+optimized_cache = None
 
 db_version = wib_db.check()
 
@@ -216,9 +228,9 @@ def restart_debug(parameter):
         logger.debug(f"{paths.script_path}")
         # Don't spam config-files to console
         logger.removeHandler(console_handler)
-        with open(cmd_opts.ui_config_file, "r") as f:
+        with open(cmd_opts.ui_config_file, "r", encoding="utf-8") as f:
             logger.debug(f.read())
-        with open(cmd_opts.ui_settings_file, "r") as f:
+        with open(cmd_opts.ui_settings_file, "r", encoding="utf-8") as f:
             logger.debug(f.read())
         logger.addHandler(console_handler)
         logger.debug(os.path.realpath(__file__))
@@ -441,7 +453,7 @@ def traverse_all_files(curr_path, image_list, tab_base_tag_box, img_path_depth) 
     f_list = [(os.path.join(curr_path, entry.name), entry.stat()) for entry in os.scandir(curr_path)]
     for f_info in f_list:
         fname, fstat = f_info
-        if os.path.splitext(fname)[1] in image_ext_list:
+        if os.path.splitext(fname)[1] in image_ext_list or os.path.splitext(fname)[1] in video_ext_list:
             image_list.append(f_info)
         elif stat.S_ISDIR(fstat.st_mode):
             if (opts.image_browser_with_subdirs and tab_base_tag_box != "image_browser_tab_others") or (tab_base_tag_box == "image_browser_tab_all") or (tab_base_tag_box == "image_browser_tab_others" and img_path_depth != 0 and (current_depth < img_path_depth or img_path_depth < 0)):
@@ -464,7 +476,7 @@ def cache_exif(fileinfos):
     new_aes = 0
     with wib_db.transaction() as cursor:
         for fi_info in fileinfos:
-            if any(fi_info[0].endswith(ext) for ext in image_ext_list):
+            if os.path.splitext(fi_info[0])[1] in image_ext_list:
                 found_exif = False
                 found_aes = False
                 if fi_info[0] in exif_cache:
@@ -866,38 +878,71 @@ def get_all_images(dir_name, sort_by, sort_order, keyword, tab_base_tag_box, img
             filenames = [finfo for finfo in fileinfos]
     return filenames
 
-def get_image_thumbnail(image_list):
-    logger.debug("get_image_thumbnail")
+def hash_image_path(image_path):
+    image_path_hash = hashlib.md5(image_path.encode("utf-8")).hexdigest()
+    cache_image_path = os.path.join(optimized_cache, image_path_hash + ".jpg")
+    cache_video_path = os.path.join(optimized_cache, image_path_hash + "_video.jpg")
+    return cache_image_path, cache_video_path 
+
+def extract_video_frame(video_path, time, image_path):
+    vidcap = cv2.VideoCapture(video_path)
+    vidcap.set(cv2.CAP_PROP_POS_MSEC, time * 1000)  # time in seconds
+    success, image = vidcap.read()
+    if success:
+        cv2.imwrite(image_path, image)
+    return success
+
+def get_thumbnail(image_video, image_list):
+    global optimized_cache
+    logger.debug(f"get_thumbnail with mode {image_video}")
     optimized_cache = os.path.join(tempfile.gettempdir(),"optimized")
     os.makedirs(optimized_cache,exist_ok=True)
     thumbnail_list = []
     for image_path in image_list:
-        image_path_hash = hashlib.md5(image_path.encode("utf-8")).hexdigest()
-        cache_image_path = os.path.join(optimized_cache, image_path_hash + ".jpg")
-        if os.path.isfile(cache_image_path):
-            thumbnail_list.append(cache_image_path)
-        else:
-            try:
-                image = Image.open(image_path)
-            except OSError:
-                # If PIL cannot open the image, use the original path
-                thumbnail_list.append(image_path)
-                continue
-            width, height = image.size
-            left = (width - min(width, height)) / 2
-            top = (height - min(width, height)) / 2
-            right = (width + min(width, height)) / 2
-            bottom = (height + min(width, height)) / 2
-            thumbnail = image.crop((left, top, right, bottom))
-            thumbnail.thumbnail((opts.image_browser_thumbnail_size, opts.image_browser_thumbnail_size))
-            if thumbnail.mode != "RGB":
-                thumbnail = thumbnail.convert("RGB")
-            try:
-                thumbnail.save(cache_image_path, "JPEG")
+        if (image_video == "image" and os.path.splitext(image_path)[1] in image_ext_list) or (image_video == "video" and os.path.splitext(image_path)[1] in video_ext_list):
+            cache_image_path, cache_video_path = hash_image_path(image_path)
+            if os.path.isfile(cache_image_path):
                 thumbnail_list.append(cache_image_path)
-            except FileNotFoundError:
-                # Cannot save cache, use PIL object
-                thumbnail_list.append(thumbnail)
+            else:
+                try:
+                    if image_video == "image":
+                        image = Image.open(image_path)
+                    else:
+                        extract_video_frame(image_path, 1, cache_video_path)
+                        image = Image.open(cache_video_path)
+                except OSError:
+                    # If PIL cannot open the image, use the original path
+                    thumbnail_list.append(image_path)
+                    continue
+                width, height = image.size
+                left = (width - min(width, height)) / 2
+                top = (height - min(width, height)) / 2
+                right = (width + min(width, height)) / 2
+                bottom = (height + min(width, height)) / 2
+                thumbnail = image.crop((left, top, right, bottom)) if opts.image_browser_thumbnail_crop else ImageOps.pad(image, (max(width, height),max(width, height)), color="#000")
+                thumbnail.thumbnail((opts.image_browser_thumbnail_size, opts.image_browser_thumbnail_size))
+
+                if image_video == "video":
+                    play_button_img = Image.new('RGBA', (100, 100), (0, 0, 0, 0))
+                    play_button_draw = ImageDraw.Draw(play_button_img)
+                    play_button_draw.polygon([(20, 20), (80, 50), (20, 80)], fill='white')
+                    play_button_img = play_button_img.resize((50, 50))
+
+                    button_for_img = Image.new('RGBA', thumbnail.size, (0, 0, 0, 0))
+                    button_for_img.paste(play_button_img, (thumbnail.width - play_button_img.width, thumbnail.height - play_button_img.height), mask=play_button_img)
+                    thumbnail_play = Image.alpha_composite(thumbnail.convert('RGBA'), button_for_img)
+                    thumbnail.close()
+                    thumbnail = thumbnail_play                    
+                if thumbnail.mode != "RGB":
+                    thumbnail = thumbnail.convert("RGB")
+                try:
+                    thumbnail.save(cache_image_path, "JPEG")
+                    thumbnail_list.append(cache_image_path)
+                except FileNotFoundError:
+                    # Cannot save cache, use PIL object
+                    thumbnail_list.append(thumbnail)
+        else:
+            thumbnail_list.append(image_path)
     return thumbnail_list
 
 def set_tooltip_info(image_list):
@@ -913,7 +958,7 @@ def set_tooltip_info(image_list):
 def get_image_page(img_path, page_index, filenames, keyword, sort_by, sort_order, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword, negative_prompt_search, use_regex, case_sensitive):
     logger.debug("get_image_page")
     if img_path == "":
-        return [], page_index, [],  "", "",  "", 0, "", None, "", "[]"
+        return [], page_index, [],  "", "",  "", 0, "", None, "", "[]", False, gr.update(visible=False)
 
     # Set temp_dir from webui settings, so gradio uses it
     if shared.opts.temp_dir != "":
@@ -936,9 +981,8 @@ def get_image_page(img_path, page_index, filenames, keyword, sort_by, sort_order
         image_browser_img_info = "[]"
 
     if opts.image_browser_use_thumbnail:
-        thumbnail_list = get_image_thumbnail(image_list)
-    else:
-        thumbnail_list = image_list
+        thumbnail_list = get_thumbnail("image", image_list)
+    thumbnail_list = get_thumbnail("video", image_list)
 
     visible_num = num_of_imgs_per_page if  idx_frm + num_of_imgs_per_page < length else length % num_of_imgs_per_page 
     visible_num = num_of_imgs_per_page if visible_num == 0 else visible_num
@@ -947,7 +991,7 @@ def get_image_page(img_path, page_index, filenames, keyword, sort_by, sort_order
     load_info += f"{length} images in this directory, divided into {int((length + 1) // num_of_imgs_per_page  + 1)} pages"
     load_info += "</div>"
 
-    return filenames, gr.update(value=page_index, label=f"Page Index ({page_index}/{max_page_index})"), thumbnail_list,  "", "",  "", visible_num, load_info, None, json.dumps(image_list), image_browser_img_info, gr.update(visible=True)
+    return filenames, gr.update(value=page_index, label=f"Page Index ({page_index}/{max_page_index})"), thumbnail_list,  "", "",  "", visible_num, load_info, None, json.dumps(image_list), image_browser_img_info, False, gr.update(visible=False)
 
 def get_current_file(tab_base_tag_box, num, page_index, filenames):
     file = filenames[int(num) + int((page_index - 1) * num_of_imgs_per_page)]
@@ -969,12 +1013,19 @@ def pnginfo2html(pnginfo, items):
 
 def show_image_info(tab_base_tag_box, num, page_index, filenames, turn_page_switch, image_gallery):
     logger.debug(f"show_image_info: tab_base_tag_box, num, page_index, len(filenames), num_of_imgs_per_page: {tab_base_tag_box}, {num}, {page_index}, {len(filenames)}, {num_of_imgs_per_page}")
+
+    video_checkbox_panel = False
+    video_checkbox = False
+
+    image_gallery = [image["name"] for image in image_gallery]
+
     if len(filenames) == 0:
         # This should only happen if webui was stopped and started again and the user clicks on one of the still displayed images.
         # The state with the filenames will be empty then. In that case we return None to prevent further errors and force a page refresh.
         turn_page_switch += 1
         file = None
         tm =  None
+        hidden = ""
         info = ""
     else:
         file_num = int(num) + int(
@@ -984,28 +1035,33 @@ def show_image_info(tab_base_tag_box, num, page_index, filenames, turn_page_swit
             turn_page_switch += 1
             file = None
             tm =  None
+            hidden = ""
             info = ""
         else:
             file = filenames[file_num]
             tm =   "<div style='color:#999' align='right'>" + time.strftime("%Y-%m-%d %H:%M:%S",time.localtime(os.path.getmtime(file))) + "</div>"
-            pnginfo = exif_cache.get(file)
-            if pnginfo and not opts.image_browser_info_add:
-                items = {}
-                info = pnginfo2html(pnginfo, items)
+            if os.path.splitext(file)[1] in image_ext_list:
+                hidden = file
+                pnginfo = exif_cache.get(file)
+                if pnginfo and not opts.image_browser_info_add:
+                    items = {}
+                    info = pnginfo2html(pnginfo, items)
+                else:
+                    try:
+                        with Image.open(file) as image:
+                            _, geninfo, info = modules.extras.run_pnginfo(image)
+                    except UnidentifiedImageError as e:
+                        info = ""
+                        logger.warning(f"UnidentifiedImageError: {e}")
+                if opts.image_browser_use_thumbnail:
+                    image_gallery[int(num)] = filenames[file_num]
             else:
-                try:
-                    with Image.open(file) as image:
-                        _, geninfo, info = modules.extras.run_pnginfo(image)
-                except UnidentifiedImageError as e:
-                    info = ""
-                    logger.warning(f"UnidentifiedImageError: {e}")
-            if opts.image_browser_use_thumbnail:
-                image_gallery = [image['name'] for image in image_gallery]
-                image_gallery[int(num)] = filenames[file_num]
-    if opts.image_browser_use_thumbnail:
-        return file, tm, num, file, turn_page_switch, info, image_gallery
-    else:
-        return file, tm, num, file, turn_page_switch, info
+                cache_image_path, cache_video_path = hash_image_path(file)
+                video_checkbox_panel = True
+                hidden = cache_video_path
+                info = ""
+
+    return file, tm, num, hidden, turn_page_switch, info, image_gallery, video_checkbox, gr.update(visible=video_checkbox_panel)
 
 def warning_style(warning):
     warning_html = f"<div style='color:red'>{warning}</div>"
@@ -1085,16 +1141,25 @@ def update_exif(img_file_name, key, value):
 
 def update_ranking(img_file_name, ranking_current, ranking, img_file_info):
     # ranking = None is different than ranking = "None"! None means no radio button selected. "None" means radio button called "None" selected.
-    if ranking is None:
+    if ranking is None or os.path.splitext(img_file_name)[1] not in image_ext_list:
         return ranking_current, None, img_file_info
 
     saved_ranking, _ = get_ranking(img_file_name)
     if saved_ranking != ranking:
         wib_db.update_ranking(img_file_name, ranking)
-        if opts.image_browser_ranking_pnginfo and any(img_file_name.endswith(ext) for ext in image_ext_list):
+        if opts.image_browser_ranking_pnginfo:
             img_file_info = update_exif(img_file_name, "Ranking", ranking)
     return ranking, None, img_file_info
-            
+
+def show_video(video_checkbox, img_file_name):
+    if video_checkbox:
+        video_checkbox_visible = True
+        video_filename = img_file_name
+    else:
+        video_checkbox_visible = False
+        video_filename = None
+    return gr.update(value=video_filename, visible=video_checkbox_visible)
+
 def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
     global init, exif_cache, aes_cache, openoutpaint, controlnet, js_dummy_return
     dir_name = None
@@ -1173,17 +1238,29 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
                             next_page = gr.Button("Next Page", elem_id=f"{tab.base_tag}_control_image_browser_next_page")
                         with gr.Column(scale=4, min_width=20):
                             end_page = gr.Button("End Page", elem_id=f"{tab.base_tag}_control_image_browser_end_page") 
-                    with gr.Row(visible=False) as ranking_panel:
-                        with gr.Column(scale=1, min_width=20):
-                            ranking_current = gr.Textbox(value="None", label="Current ranking", interactive=False)
-                        with gr.Column(scale=4, min_width=20):
-                            ranking = gr.Radio(choices=["1", "2", "3", "4", "5", "None"], label="Set ranking to", elem_id=f"{tab.base_tag}_control_image_browser_ranking", interactive=True)
+                    with gr.Row():
+                        with gr.Column(scale=5, min_width=40, visible=False) as ranking_panel:
+                            with gr.Row():
+                                with gr.Column(scale=1, min_width=20):
+                                    ranking_current = gr.Textbox(value="None", label="Current ranking", interactive=False)
+                                with gr.Column(scale=4, min_width=20):
+                                    ranking = gr.Radio(choices=["1", "2", "3", "4", "5", "None"], label="Set ranking to", elem_id=f"{tab.base_tag}_control_image_browser_ranking", interactive=True)
+                        with gr.Column(scale=1, min_width=20, visible=False) as video_checkbox_panel:
+                            video_checkbox = gr.Checkbox(value=False, label="Show video frame", elem_id=f"{tab.base_tag}_image_browser_video_checkbox")
+                        with gr.Column(scale=5, min_width=40):
+                            gr.HTML("&nbsp")
+                    if opts.image_browser_video_pos == "Above":
+                        with gr.Row():
+                            video_element = gr.Video(visible=False, width=opts.image_browser_video_x, height=opts.image_browser_video_y)
                     with gr.Row():
                         gradio_new = "3.39.0"
                         if version.parse(gr.__version__) < version.parse(gradio_new):
                             image_gallery = gr.Gallery(show_label=False, elem_id=f"{tab.base_tag}_image_browser_gallery").style(columns=opts.image_browser_page_columns, height=("max-content" if opts.image_browser_height_auto else None))
                         else:
                             image_gallery = gr.Gallery(show_label=False, elem_id=f"{tab.base_tag}_image_browser_gallery", columns=opts.image_browser_page_columns, height=("max-content" if opts.image_browser_height_auto else None))
+                    if opts.image_browser_video_pos == "Below":
+                        with gr.Row():
+                            video_element = gr.Video(visible=False, width=opts.image_browser_video_x, height=opts.image_browser_video_y)
                     with gr.Row() as delete_panel:
                         with gr.Column(scale=1):
                             delete_num = gr.Number(value=1, interactive=True, label="delete next", elem_id=f"{tab.base_tag}_image_browser_del_num")
@@ -1521,15 +1598,11 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
     )
 
     # other functions
-    if opts.image_browser_use_thumbnail:
-        set_index_outputs = [img_file_name, img_file_time, image_index, hidden, turn_page_switch, img_file_info_add, image_gallery]
-    else:
-        set_index_outputs = [img_file_name, img_file_time, image_index, hidden, turn_page_switch, img_file_info_add]
     set_index.click(
         fn=show_image_info,
         _js="image_browser_get_current_img",
         inputs=[tab_base_tag_box, image_index, page_index, filenames, turn_page_switch, image_gallery],
-        outputs=set_index_outputs,
+        outputs=[img_file_name, img_file_time, image_index, hidden, turn_page_switch, img_file_info_add, image_gallery, video_checkbox, video_checkbox_panel],
         show_progress=opts.image_browser_show_progress
     ).then(
         fn=None,
@@ -1548,7 +1621,7 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
     
     #ranking
     ranking.change(update_ranking, inputs=[img_file_name, ranking_current, ranking, img_file_info], outputs=[ranking_current, ranking, img_file_info], show_progress=opts.image_browser_show_progress)
-        
+
     try:
         modules.generation_parameters_copypaste.bind_buttons(send_to_buttons, hidden, img_file_info)
     except:
@@ -1578,7 +1651,7 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
         turn_page_switch.change(
             fn=get_image_page, 
             inputs=[img_path, page_index, filenames, filename_keyword_search, sort_by, sort_order, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword_search, negative_prompt_search, use_regex, case_sensitive], 
-            outputs=[filenames, page_index, image_gallery, img_file_name, img_file_time, img_file_info, visible_img_num, warning_box, hidden, image_page_list, image_browser_img_info],
+            outputs=[filenames, page_index, image_gallery, img_file_name, img_file_time, img_file_info, visible_img_num, warning_box, hidden, image_page_list, image_browser_img_info, video_checkbox, video_checkbox_panel],
             show_progress=opts.image_browser_show_progress
         ).then(
             fn=None,
@@ -1593,7 +1666,8 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
             inputs=[tab_base_tag_box, image_index, image_browser_prompt, image_browser_neg_prompt],
             outputs=[js_dummy_return],
             _js="image_browser_openoutpaint_send",
-            show_progress=opts.image_browser_show_progress        )
+            show_progress=opts.image_browser_show_progress
+        )
         sendto_controlnet_txt2img.click(
             fn=None,
             inputs=[tab_base_tag_box, image_index, sendto_controlnet_num, sendto_controlnet_type],
@@ -1608,9 +1682,16 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
             _js="image_browser_controlnet_send_img2img",
             show_progress=opts.image_browser_show_progress
         )
+        video_checkbox.change(
+            fn=show_video, 
+            inputs=[video_checkbox, img_file_name],
+            outputs=[video_element],
+            show_progress=opts.image_browser_show_progress
+        )
+
 
 def run_pnginfo(image, image_path, image_file_name):
-    if image is None:
+    if image is None or os.path.splitext(image_file_name)[1] not in image_ext_list:
         return '', '', '', '', ''
     try:
         geninfo, items = images.read_info_from_image(image)
@@ -1723,10 +1804,14 @@ def on_ui_settings():
         ("image_browser_height_auto", None, False, "Use automatic height for gallery (requires Gradio >= 3.36.0)"),
         ("image_browser_use_thumbnail", None, False, "Use optimized images in the thumbnail interface (significantly reduces the amount of data transferred)"),
         ("image_browser_thumbnail_size", None, 200, "Size of the thumbnails (px)"),
+        ("image_browser_thumbnail_crop", None, False, "Crop thumbnail to square"),
         ("image_browser_swipe", None, False, "Swipe left/right navigates to the next image"),
         ("image_browser_img_tooltips", None, True, "Enable thumbnail tooltips"),
         ("image_browser_show_progress", None, True, "Show progress indicator"),
         ("image_browser_info_add", None, False, "Show Additional Generation Info"),        
+        ("image_browser_video_pos", None, "Above", "Video above or below gallery", gr.Dropdown, lambda: {"choices": ["Above", "Below"]}),
+        ("image_browser_video_x", None, 640, "Video player width (px)"),
+        ("image_browser_video_y", None, 640, "Video player height (px)"),
     ]
 
     section = ('image-browser', "Image Browser")

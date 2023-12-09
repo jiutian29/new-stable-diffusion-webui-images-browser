@@ -86,4 +86,9 @@ button[id$='_image_browser_del_img_btn'] {
 
 #tab_image_browser .gradio-box {
   padding: 5px !important;
+
+}
+.image_browser_symbol_button {
+    margin-top: var(--text-xxl) !important;
+    padding: 1px !important;
 }
