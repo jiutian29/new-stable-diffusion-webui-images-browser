@@ -56,8 +56,18 @@ Please also check the [discussions](https://github.com/AlUlkesh/stable-diffusion
 
 (Ctrl can be changed in settings)
 
+## Image ratio
+Thumbnails are displayed as squares. Currently the default in automatic1111 is for thumbnails to be cropped for this. If you prefer to see the full image, with black bars, you can add this to user.css (in the main a1111 directory):
+
+```
+.thumbnail-item > img {
+    object-fit: contain !important;
+}
+.thumbnail-lg > img {
+    object-fit: contain !important;
+}
+```
+
 ## Credit
 
 Credit goes to the original maintainer of this extension: https://github.com/yfszzx and to major contributors https://github.com/Klace and https://github.com/EllangoK
-
-Image Reward: https://github.com/THUDM/ImageReward
