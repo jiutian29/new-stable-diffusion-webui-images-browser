@@ -1017,7 +1017,11 @@ def show_image_info(tab_base_tag_box, num, page_index, filenames, turn_page_swit
     video_checkbox_panel = False
     video_checkbox = False
 
-    image_gallery = [image["name"] for image in image_gallery]
+    gradio_new = "4.0.0"
+    if version.parse(gr.__version__) < version.parse(gradio_new):
+        image_gallery = [image["name"] for image in image_gallery]
+    else:
+        image_gallery = [image_gallery_element.image.path for image_gallery_element in image_gallery.root]
 
     if len(filenames) == 0:
         # This should only happen if webui was stopped and started again and the user clicks on one of the still displayed images.
