@@ -704,9 +704,16 @@ function image_browser_keydown() {
         if (event.code == "ArrowLeft" && modifiers_none) {
             image_browser_img_show_in_progress = true
             const tab_base_tag = image_browser_current_tab()
+            const gallery = gradioApp().querySelector(`#${tab_base_tag}_image_browser`)
+            const gallery_items = gallery.querySelectorAll(".thumbnail-item")
+            const thumbnails = gallery_items.length / 2
             const set_btn = gradioApp().querySelector(`#${tab_base_tag}_image_browser .image_browser_set_index`)
             const curr_idx = parseInt(set_btn.getAttribute("img_index"))
-            set_btn.setAttribute("img_index", curr_idx - 1)
+            let new_idx = curr_idx - 1
+            if (new_idx < 0) {
+                new_idx = thumbnails - 1
+            }
+            set_btn.setAttribute("img_index", new_idx)
             image_browser_refresh_current_page_preview()
         }
         
@@ -718,9 +725,16 @@ function image_browser_keydown() {
         if (event.code == "ArrowRight" && modifiers_none) {
             image_browser_img_show_in_progress = true
             const tab_base_tag = image_browser_current_tab()
+            const gallery = gradioApp().querySelector(`#${tab_base_tag}_image_browser`)
+            const gallery_items = gallery.querySelectorAll(".thumbnail-item")
+            const thumbnails = gallery_items.length / 2
             const set_btn = gradioApp().querySelector(`#${tab_base_tag}_image_browser .image_browser_set_index`)
             const curr_idx = parseInt(set_btn.getAttribute("img_index"))
-            set_btn.setAttribute("img_index", curr_idx + 1)
+            let new_idx = curr_idx + 1
+            if (new_idx > thumbnails - 1) {
+                new_idx = 0
+            }
+            set_btn.setAttribute("img_index", new_idx)
             image_browser_refresh_current_page_preview()
         }
     })
