@@ -189,8 +189,9 @@ def restart_debug(parameter):
     logger.setLevel(logger_mode)
     if (logger.hasHandlers()):
         logger.handlers.clear()
-    console_handler_stream = codecs.getwriter('utf-8')(sys.stdout.buffer)
-    console_handler = logging.StreamHandler(console_handler_stream)
+    #console_handler_stream = codecs.getwriter('utf-8')(sys.stdout.buffer)
+    #console_handler = logging.StreamHandler(console_handler_stream)
+    console_handler = logging.StreamHandler()
     console_handler.setLevel(logger_mode)
     formatter = logging.Formatter(f'%(asctime)s image_browser.py: %(message)s', datefmt='%Y-%m-%d-%H:%M:%S')
     console_handler.setFormatter(formatter)
@@ -200,7 +201,8 @@ def restart_debug(parameter):
             os.unlink(log_file)
         except FileNotFoundError:
             pass
-        file_handler = logging.FileHandler(log_file, "w", "utf-8")
+        #file_handler = logging.FileHandler(log_file, "w", "utf-8")
+        file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logger_mode)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
