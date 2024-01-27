@@ -1,4 +1,5 @@
 import gradio as gr
+import codecs
 import csv
 import importlib
 import json
@@ -188,7 +189,8 @@ def restart_debug(parameter):
     logger.setLevel(logger_mode)
     if (logger.hasHandlers()):
         logger.handlers.clear()
-    console_handler = logging.StreamHandler()
+    console_handler_stream = codecs.getwriter('utf-8')(sys.stdout.buffer)
+    console_handler = logging.StreamHandler(console_handler_stream)
     console_handler.setLevel(logger_mode)
     formatter = logging.Formatter(f'%(asctime)s image_browser.py: %(message)s', datefmt='%Y-%m-%d-%H:%M:%S')
     console_handler.setFormatter(formatter)
@@ -198,7 +200,7 @@ def restart_debug(parameter):
             os.unlink(log_file)
         except FileNotFoundError:
             pass
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(log_file, "w", "utf-8")
         file_handler.setLevel(logger_mode)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
@@ -477,16 +479,19 @@ def cache_exif(fileinfos):
     new_aes = 0
     with wib_db.transaction() as cursor:
         for fi_info in fileinfos:
-            if os.path.splitext(fi_info[0])[1] in image_ext_list:
-                found_exif = False
-                found_aes = False
-                if fi_info[0] in exif_cache:
-                    found_exif = True
-                if fi_info[0] in aes_cache:
-                    found_aes = True
-                if not found_exif or not found_aes:
-                    exif_cache[fi_info[0]] = "0"
-                    aes_cache[fi_info[0]] = "0"
+            found_exif = False
+            found_aes = False
+            if fi_info[0] in exif_cache:
+                found_exif = True
+            if fi_info[0] in aes_cache:
+                found_aes = True
+            is_img = os.path.splitext(fi_info[0])[1] in image_ext_list
+            if not found_exif or not found_aes or not is_img:
+                exif_cache[fi_info[0]] = "0"
+                aes_cache[fi_info[0]] = "0"
+                if not is_img:
+                    allExif = False
+                else:
                     try:
                         image = Image.open(fi_info[0])
                         (_, allExif, allExif_html) = modules.extras.run_pnginfo(image)
@@ -511,12 +516,31 @@ def cache_exif(fileinfos):
                             logger.warning(f"Caught OSError with error code 22: {fi_info[0]}")
                         else:
                             raise
-                    if allExif:
-                        exif_cache[fi_info[0]] = allExif
-                        wib_db.update_exif_data(cursor, fi_info[0], allExif)
+                if allExif:
+                    exif_cache[fi_info[0]] = allExif
+                    wib_db.update_exif_data(cursor, fi_info[0], allExif)
+                    new_exif = new_exif + 1
+
+                    m = re.search("(?:aesthetic_score:|Score:) (\d+.\d+)", allExif, flags=re.IGNORECASE)
+                    if m:
+                        aes_value = m.group(1)
+                    else:
+                        aes_value = "0"
+                    aes_cache[fi_info[0]] = aes_value
+                    wib_db.update_exif_data_by_key(cursor, fi_info[0], "aesthetic_score", aes_value)
+                    new_aes = new_aes + 1
+                else:
+                    try:
+                        filename = os.path.splitext(fi_info[0])[0] + ".txt"
+                        geninfo = ""
+                        with open(filename) as f:
+                            for line in f:
+                                geninfo += line
+                        exif_cache[fi_info[0]] = geninfo
+                        wib_db.update_exif_data_by_key(cursor, fi_info[0], geninfo)
                         new_exif = new_exif + 1
 
-                        m = re.search("(?:aesthetic_score:|Score:) (\d+.\d+)", allExif, flags=re.IGNORECASE)
+                        m = re.search("(?:aesthetic_score:|Score:) (\d+.\d+)", geninfo, flags=re.IGNORECASE)
                         if m:
                             aes_value = m.group(1)
                         else:
@@ -524,37 +548,19 @@ def cache_exif(fileinfos):
                         aes_cache[fi_info[0]] = aes_value
                         wib_db.update_exif_data_by_key(cursor, fi_info[0], "aesthetic_score", aes_value)
                         new_aes = new_aes + 1
-                    else:
-                        try:
-                            filename = os.path.splitext(fi_info[0])[0] + ".txt"
-                            geninfo = ""
-                            with open(filename) as f:
-                                for line in f:
-                                    geninfo += line
-                            exif_cache[fi_info[0]] = geninfo
-                            wib_db.update_exif_data_by_key(cursor, fi_info[0], geninfo)
-                            new_exif = new_exif + 1
-
-                            m = re.search("(?:aesthetic_score:|Score:) (\d+.\d+)", geninfo, flags=re.IGNORECASE)
-                            if m:
-                                aes_value = m.group(1)
-                            else:
-                                aes_value = "0"
-                            aes_cache[fi_info[0]] = aes_value
-                            wib_db.update_exif_data_by_key(cursor, fi_info[0], "aesthetic_score", aes_value)
-                            new_aes = new_aes + 1
-                        except Exception:
+                    except Exception:
+                        if is_img:
                             logger.warning(f"cache_exif: No EXIF in image or txt file for {fi_info[0]}")
-                            # Saved with defaults to not scan it again next time
-                            exif_cache[fi_info[0]] = "0"
-                            allExif = "0"
-                            wib_db.update_exif_data(cursor, fi_info[0], allExif)
-                            new_exif = new_exif + 1
+                        # Saved with defaults to not scan it again next time
+                        exif_cache[fi_info[0]] = "0"
+                        allExif = "0"
+                        wib_db.update_exif_data(cursor, fi_info[0], allExif)
+                        new_exif = new_exif + 1
 
-                            aes_value = "0"
-                            aes_cache[fi_info[0]] = aes_value
-                            wib_db.update_exif_data_by_key(cursor, fi_info[0], "aesthetic_score", aes_value)
-                            new_aes = new_aes + 1
+                        aes_value = "0"
+                        aes_cache[fi_info[0]] = aes_value
+                        wib_db.update_exif_data_by_key(cursor, fi_info[0], "aesthetic_score", aes_value)
+                        new_aes = new_aes + 1
 
     if yappi_do:
         yappi.stop()
@@ -1311,7 +1317,7 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
                             aes_filter_min = gr.Textbox(value="", label="Minimum score")
                             aes_filter_max = gr.Textbox(value="", label="Maximum score")
                     with gr.Row() as generation_info_panel:
-                        img_file_info = gr.Textbox(label="Generation Info", interactive=False, lines=6,elem_id=f"{tab.base_tag}_image_browser_file_info")
+                        img_file_info = gr.Textbox(label="Generation Info", interactive=False, lines=6, elem_id=f"{tab.base_tag}_image_browser_file_info")
                     with gr.Row() as filename_panel:
                         img_file_name = gr.Textbox(value="", label="File Name", interactive=False)
                     with gr.Row() as filetime_panel:
