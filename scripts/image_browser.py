@@ -170,9 +170,31 @@ def debug_levels(arg_value=None, arg_level=None, arg_text=None):
 
 # Logging
 logger = None
-def restart_debug(parameter):
-    global logger
-    logger = logging.getLogger(__name__)
+logger_mode = None
+
+def setup_file_handler():
+    handler_active = False
+    handlers = logger.handlers
+    for handler in handlers:
+        if isinstance(handler, logging.FileHandler):
+            if os.path.basename(handler.baseFilename) == os.path.basename(log_file):
+                handler_active = True
+                break
+    if not handler_active:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logger_mode)
+        formatter = logging.Formatter(f'%(asctime)s image_browser.py: %(message)s', datefmt='%Y-%m-%d-%H:%M:%S')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+def setup_debug():
+    global logger, logger_mode
+    try:
+        common_logger = True
+        logger = shared.log
+    except AttributeError:
+        common_logger = False
+        logger = logging.getLogger(__name__)
     logger.disabled = False
     logger_mode = logging.ERROR
     level_value = 0
@@ -187,31 +209,21 @@ def restart_debug(parameter):
         elif level_value >= warning_level_value:
             logger_mode = logging.WARNING
     logger.setLevel(logger_mode)
-    if (logger.hasHandlers()):
-        logger.handlers.clear()
-    #console_handler_stream = codecs.getwriter('utf-8')(sys.stdout.buffer)
-    #console_handler = logging.StreamHandler(console_handler_stream)
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logger_mode)
-    formatter = logging.Formatter(f'%(asctime)s image_browser.py: %(message)s', datefmt='%Y-%m-%d-%H:%M:%S')
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    if not common_logger:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logger_mode)
+        formatter = logging.Formatter(f'%(asctime)s image_browser.py: %(message)s', datefmt='%Y-%m-%d-%H:%M:%S')
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
     if level_value >= capture_level_value:
         try:
             os.unlink(log_file)
         except FileNotFoundError:
             pass
-        #file_handler = logging.FileHandler(log_file, "w", "utf-8")
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(logger_mode)
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
+        setup_file_handler()
     logger.warning(f"debug_level: {level_value}")
     # Debug logging
     if logger.getEffectiveLevel() == logging.DEBUG:
-        if parameter != "startup":
-            logging.disable(logging.NOTSET)
-
         logger.debug(f"{sys.executable} {sys.version}")
         logger.debug(f"{platform.system()} {platform.version()}")
         try:
@@ -231,21 +243,15 @@ def restart_debug(parameter):
         logger.debug(f"Image Browser {image_browser_commit_hash}")
         logger.debug(f"Gradio {gr.__version__}")
         logger.debug(f"{paths.script_path}")
-        # Don't spam config-files to console
-        logger.removeHandler(console_handler)
         with open(cmd_opts.ui_config_file, "r", encoding="utf-8") as f:
             logger.debug(f.read())
         with open(cmd_opts.ui_settings_file, "r", encoding="utf-8") as f:
             logger.debug(f.read())
-        logger.addHandler(console_handler)
         logger.debug(os.path.realpath(__file__))
         logger.debug([str(tab) for tab in tabs_list])
         logger.debug(f"db_version: {db_version}")
-    maint_last_msg = "Debug restarted"
 
-    return parameter, maint_last_msg
-
-restart_debug("startup")
+setup_debug()
 
 def delete_recycle(filename):
     if opts.image_browser_delete_recycle and send2trash_installed:
@@ -680,6 +686,12 @@ def reapply_ranking(path_recorder, maint_wait):
                                 wib_db.replace_ranking(cursor, file, alternate_file, hash)
 
     maint_last_msg = "Rankings reapplied"
+
+    return maint_wait, maint_last_msg
+
+def restart_debug(maint_wait):
+    setup_file_handler()
+    maint_last_msg = "Debug restarted"
 
     return maint_wait, maint_last_msg
 
