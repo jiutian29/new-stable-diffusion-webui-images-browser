@@ -53,6 +53,11 @@ except ImportError:
     print("Image Browser: opencv is not installed. Video related actions cannot be performed.")
     opencv_installed = False
 
+try:
+    from modules import generation_parameters_copypaste as sendto
+except ImportError:
+    from modules import infotext_utils as sendto
+
 # Force reload wib_db, as it doesn't get reloaded otherwise, if an extension update is started from webui
 importlib.reload(wib_db)
 
@@ -1353,7 +1358,7 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
                                     favorites_btn_show = True
                                 favorites_btn = gr.Button(f'{copy_move[opts.image_browser_copy_image]} to favorites', elem_id=f"{tab.base_tag}_image_browser_favorites_btn", visible=favorites_btn_show)
                                 try:
-                                    send_to_buttons = modules.generation_parameters_copypaste.create_buttons(["txt2img", "img2img", "inpaint", "extras"])
+                                    send_to_buttons = sendto.create_buttons(["txt2img", "img2img", "inpaint", "extras"])
                                 except:
                                     pass
                                 sendto_openoutpaint = gr.Button("Send to openOutpaint", elem_id=f"{tab.base_tag}_image_browser_openoutpaint_btn", visible=openoutpaint)
@@ -1653,7 +1658,7 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
     ranking.change(update_ranking, inputs=[img_file_name, ranking_current, ranking, img_file_info], outputs=[ranking_current, ranking, img_file_info], show_progress=show_progress_setting)
 
     try:
-        modules.generation_parameters_copypaste.bind_buttons(send_to_buttons, hidden, img_file_info)
+        sendto.bind_buttons(send_to_buttons, hidden, img_file_info)
     except:
         pass
     
