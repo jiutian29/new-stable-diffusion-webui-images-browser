@@ -91,6 +91,7 @@ js_dummy_return = None
 log_file = os.path.join(scripts.basedir(), "image_browser.log")
 optimized_cache = None
 show_progress_setting = True
+img_file_info_order = ["Model", "VAE", "Sampler", "Schedule", "Steps", "CFG scale", "Seed", "Size"]
 
 db_version = wib_db.check()
 
@@ -1206,6 +1207,9 @@ def img_file_info_do_format(img_file_info):
     if key_value_pairs:
         img_file_info_formatted = f"Prompt: {prompt}\n\nNegative_prompt: {negative_prompt}\n\n"
         lines = 5
+        # Sort the key_value_pairs by the order in img_file_info_order
+        key_value_pairs = sorted(key_value_pairs, key=lambda pair: (img_file_info_order.index(pair[0]) if pair[0] in img_file_info_order else len(img_file_info_order), pair[0]))
+
         for (key, value) in key_value_pairs:
             img_file_info_formatted = img_file_info_formatted + f"{key}: {value}\n"
             lines = lines + 1
