@@ -180,10 +180,11 @@ def migrate_path_recorder(cursor):
 
     return
 
-def update_exif_data(cursor, file, info):
+def split_exif_data(info):
     prompt = "0"
     negative_prompt = "0"
     key_values = "0: 0"
+    key_value_pairs = []
     if info != "0":
         info_list = info.split("\n")
         prompt = ""
@@ -201,7 +202,6 @@ def update_exif_data(cursor, file, info):
                     # multiline prompts
                     prompt = f"{prompt}\n{info_item}"
     if key_values != "":
-        key_value_pairs = []
         key_value = ""
         quote_open = False
         for char in key_values + ",":
@@ -216,37 +216,42 @@ def update_exif_data(cursor, file, info):
                     v = ""
                 key_value_pairs.append((k, v))
                 key_value = ""
+    
+    return prompt, negative_prompt, key_value_pairs
 
-                try:
-                    cursor.execute('''
-                    INSERT INTO exif_data (file, key, value)
-                    VALUES (?, ?, ?)
-                    ''', (file, "prompt", prompt))
-                except sqlite3.IntegrityError:
-                    # Duplicate, delete all "file" entries and try again
-                    cursor.execute('''
-                    DELETE FROM exif_data
-                    WHERE file = ?
-                    ''', (file,))
+def update_exif_data(cursor, file, info):
+    prompt, negative_prompt, key_value_pairs = split_exif_data(info)
+    if key_value_pairs:
+        try:
+            cursor.execute('''
+            INSERT INTO exif_data (file, key, value)
+            VALUES (?, ?, ?)
+            ''', (file, "prompt", prompt))
+        except sqlite3.IntegrityError:
+            # Duplicate, delete all "file" entries and try again
+            cursor.execute('''
+            DELETE FROM exif_data
+            WHERE file = ?
+            ''', (file,))
 
-                    cursor.execute('''
-                    INSERT INTO exif_data (file, key, value)
-                    VALUES (?, ?, ?)
-                    ''', (file, "prompt", prompt))
+            cursor.execute('''
+            INSERT INTO exif_data (file, key, value)
+            VALUES (?, ?, ?)
+            ''', (file, "prompt", prompt))
 
+        cursor.execute('''
+        INSERT INTO exif_data (file, key, value)
+        VALUES (?, ?, ?)
+        ''', (file, "negative_prompt", negative_prompt))
+        
+        for (key, value) in key_value_pairs:
+            try:
                 cursor.execute('''
                 INSERT INTO exif_data (file, key, value)
                 VALUES (?, ?, ?)
-                ''', (file, "negative_prompt", negative_prompt))
-                
-                for (key, value) in key_value_pairs:
-                    try:
-                        cursor.execute('''
-                        INSERT INTO exif_data (file, key, value)
-                        VALUES (?, ?, ?)
-                        ''', (file, key, value))
-                    except sqlite3.IntegrityError:
-                        pass
+                ''', (file, key, value))
+            except sqlite3.IntegrityError:
+                pass
     
     return
 

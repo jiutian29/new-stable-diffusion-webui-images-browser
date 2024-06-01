@@ -1190,6 +1190,27 @@ def show_video(video_checkbox, img_file_name):
         video_filename = None
     return gr.update(value=video_filename, visible=video_checkbox_visible)
 
+def img_file_info_format_visibility(img_file_info_format):
+    if img_file_info_format:
+        img_file_info_visible = False
+        img_file_info_formatted_visible = True
+    else:
+        img_file_info_visible = True
+        img_file_info_formatted_visible = False
+    return gr.update(visible=img_file_info_visible), gr.update(visible=img_file_info_formatted_visible)
+
+def img_file_info_do_format(img_file_info):
+    img_file_info_formatted = ""
+    lines = 6
+    prompt, negative_prompt, key_value_pairs = wib_db.split_exif_data(img_file_info)
+    if key_value_pairs:
+        img_file_info_formatted = f"Prompt: {prompt}\n\nNegative_prompt: {negative_prompt}\n\n"
+        lines = 5
+        for (key, value) in key_value_pairs:
+            img_file_info_formatted = img_file_info_formatted + f"{key}: {value}\n"
+            lines = lines + 1
+    return gr.update(value=img_file_info_formatted, lines=lines)
+
 def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
     global init, exif_cache, aes_cache, openoutpaint, controlnet, js_dummy_return, show_progress_setting
     dir_name = None
@@ -1335,8 +1356,12 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
                         with gr.Row():
                             aes_filter_min = gr.Textbox(value="", label="Minimum score")
                             aes_filter_max = gr.Textbox(value="", label="Maximum score")
-                    with gr.Row() as generation_info_panel:
-                        img_file_info = gr.Textbox(label="Generation Info", interactive=False, lines=6, elem_id=f"{tab.base_tag}_image_browser_file_info")
+                    with gr.Box() as generation_info_panel:
+                        with gr.Row():
+                            img_file_info_format = gr.Checkbox(value=opts.image_browser_info_format, label="Formatted display")
+                        with gr.Row():
+                            img_file_info = gr.Textbox(label="Generation Info", interactive=False, lines=6, visible=not opts.image_browser_info_format)
+                            img_file_info_formatted = gr.Textbox(label="Generation Info", interactive=False, lines=6, visible=opts.image_browser_info_format)
                     with gr.Row() as filename_panel:
                         img_file_name = gr.Textbox(value="", label="File Name", interactive=False)
                     with gr.Row() as filetime_panel:
@@ -1560,6 +1585,18 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
         fn=warning_box_visibility,
         inputs=[warning_box],
         outputs=[warning_box],
+        show_progress=show_progress_setting
+    )
+    img_file_info_format.change(
+        fn=img_file_info_format_visibility,
+        inputs=[img_file_info_format],
+        outputs=[img_file_info, img_file_info_formatted],
+        show_progress=show_progress_setting
+    )
+    img_file_info.change(
+        fn=img_file_info_do_format,
+        inputs=[img_file_info],
+        outputs=[img_file_info_formatted],
         show_progress=show_progress_setting
     )
 
@@ -1843,6 +1880,7 @@ def on_ui_settings():
         ("image_browser_swipe", None, False, "Swipe left/right navigates to the next image"),
         ("image_browser_img_tooltips", None, True, "Enable thumbnail tooltips"),
         ("image_browser_show_progress", None, True, "Show progress indicator"),
+        ("image_browser_info_format", None, True, "Initially display Generation Info as formatted"),
         ("image_browser_info_add", None, False, "Show Additional Generation Info"),        
         ("image_browser_video_pos", None, "Above", "Video above or below gallery", gr.Dropdown, lambda: {"choices": ["Above", "Below"]}),
         ("image_browser_video_x", None, 640, "Video player width (px)"),
