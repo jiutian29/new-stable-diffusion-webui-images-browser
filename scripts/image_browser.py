@@ -91,7 +91,6 @@ js_dummy_return = None
 log_file = os.path.join(scripts.basedir(), "image_browser.log")
 optimized_cache = None
 show_progress_setting = True
-img_file_info_order = ["Model", "VAE", "Sampler", "Schedule", "Steps", "CFG scale", "Seed", "Size"]
 
 db_version = wib_db.check()
 
@@ -1201,19 +1200,16 @@ def img_file_info_format_visibility(img_file_info_format):
     return gr.update(visible=img_file_info_visible), gr.update(visible=img_file_info_formatted_visible)
 
 def img_file_info_do_format(img_file_info):
-    img_file_info_formatted = ""
-    lines = 6
+    img_file_info_formatted = []
     prompt, negative_prompt, key_value_pairs = wib_db.split_exif_data(img_file_info)
     if key_value_pairs:
-        img_file_info_formatted = f"Prompt: {prompt}\n\nNegative_prompt: {negative_prompt}\n\n"
-        lines = 5
+        key_value_pairs.append(("Prompt", prompt))
+        key_value_pairs.append(("Negative prompt", negative_prompt))
         # Sort the key_value_pairs by the order in img_file_info_order
+        img_file_info_order = opts.image_browser_info_order.split(',')
         key_value_pairs = sorted(key_value_pairs, key=lambda pair: (img_file_info_order.index(pair[0]) if pair[0] in img_file_info_order else len(img_file_info_order), pair[0]))
-
-        for (key, value) in key_value_pairs:
-            img_file_info_formatted = img_file_info_formatted + f"{key}: {value}\n"
-            lines = lines + 1
-    return gr.update(value=img_file_info_formatted, lines=lines)
+        img_file_info_formatted = key_value_pairs
+    return img_file_info_formatted
 
 def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
     global init, exif_cache, aes_cache, openoutpaint, controlnet, js_dummy_return, show_progress_setting
@@ -1365,7 +1361,7 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
                             img_file_info_format = gr.Checkbox(value=opts.image_browser_info_format, label="Formatted display")
                         with gr.Row():
                             img_file_info = gr.Textbox(label="Generation Info", interactive=False, lines=6, visible=not opts.image_browser_info_format)
-                            img_file_info_formatted = gr.Textbox(label="Generation Info", interactive=False, lines=6, visible=opts.image_browser_info_format)
+                            img_file_info_formatted = gr.DataFrame(label="Generation Info", headers=["Key", "Value"], wrap=True, interactive=False, visible=opts.image_browser_info_format, elem_classes="image_browser_file_info_formatted")
                     with gr.Row() as filename_panel:
                         img_file_name = gr.Textbox(value="", label="File Name", interactive=False)
                     with gr.Row() as filetime_panel:
@@ -1885,6 +1881,7 @@ def on_ui_settings():
         ("image_browser_img_tooltips", None, True, "Enable thumbnail tooltips"),
         ("image_browser_show_progress", None, True, "Show progress indicator"),
         ("image_browser_info_format", None, True, "Initially display Generation Info as formatted"),
+        ("image_browser_info_order", None, "Prompt,Negative prompt,Model,VAE,Sampler,Schedule,Steps,CFG scale,Seed,Size", "Display order for Generation Info as formatted"),
         ("image_browser_info_add", None, False, "Show Additional Generation Info"),        
         ("image_browser_video_pos", None, "Above", "Video above or below gallery", gr.Dropdown, lambda: {"choices": ["Above", "Below"]}),
         ("image_browser_video_x", None, 640, "Video player width (px)"),

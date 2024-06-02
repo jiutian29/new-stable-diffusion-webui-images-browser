@@ -92,3 +92,15 @@ button[id$='_image_browser_del_img_btn'] {
     margin-top: var(--text-xxl) !important;
     padding: 1px !important;
 }
+.image_browser_file_info_formatted {
+  width: 100%;
+}
+.image_browser_file_info_formatted th {
+  display: none;
+}
+.image_browser_file_info_formatted td:first-child {
+  width: 30%;
+}
+.image_browser_file_info_formatted td:not(:first-child) {
+  width: 70%;
+}
