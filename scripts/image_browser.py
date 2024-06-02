@@ -1008,7 +1008,9 @@ def get_image_page(img_path, page_index, filenames, keyword, sort_by, sort_order
 
     if opts.image_browser_use_thumbnail:
         thumbnail_list = get_thumbnail("image", image_list)
-    thumbnail_list = get_thumbnail("video", image_list)
+    else:
+        thumbnail_list = image_list
+    thumbnail_list = get_thumbnail("video", thumbnail_list)
 
     visible_num = num_of_imgs_per_page if  idx_frm + num_of_imgs_per_page < length else length % num_of_imgs_per_page 
     visible_num = num_of_imgs_per_page if visible_num == 0 else visible_num
@@ -1869,6 +1871,7 @@ def on_ui_settings():
         ("image_browser_scan_exif", "images_scan_exif", True, "Scan Exif-/.txt-data (initially slower, but required for many features to work)"),
         ("image_browser_mod_shift", None, False, "Change CTRL keybindings to SHIFT"),
         ("image_browser_mod_ctrl_shift", None, False, "or to CTRL+SHIFT"),
+        ("image_browser_swipe", None, False, "Swipe left/right navigates to the next image"),
         ("image_browser_ranking_pnginfo", None, False, "Save ranking in image's pnginfo"),
         ("image_browser_page_columns", "images_history_page_columns", 6, "Number of columns on the page"),
         ("image_browser_page_rows", "images_history_page_rows", 6, "Number of rows on the page"),
@@ -1877,7 +1880,6 @@ def on_ui_settings():
         ("image_browser_use_thumbnail", None, False, "Use optimized images in the thumbnail interface (significantly reduces the amount of data transferred)"),
         ("image_browser_thumbnail_size", None, 200, "Size of the thumbnails (px)"),
         ("image_browser_thumbnail_crop", None, False, "Crop thumbnail to square"),
-        ("image_browser_swipe", None, False, "Swipe left/right navigates to the next image"),
         ("image_browser_img_tooltips", None, True, "Enable thumbnail tooltips"),
         ("image_browser_show_progress", None, True, "Show progress indicator"),
         ("image_browser_info_format", None, True, "Initially display Generation Info as formatted"),

@@ -58,6 +58,18 @@ button[id$='_image_browser_del_img_btn'] {
   cursor: not-allowed;
 }
 
+/* Fit the image inside the button */
+#tab_image_browser .thumbnail-item > img {
+    object-fit: contain !important;
+}
+#tab_image_browser .thumbnail-lg > img {
+    object-fit: contain !important;
+}
+/*Fit the button around the image
+#tab_image_browser .thumbnail-item {
+    aspect-ratio: auto !important;
+}*/
+
 #tab_image_browser .thumbnails .thumbnail-item:first-child{
   margin-left: var(--spacing-lg);
 }
