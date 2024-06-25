@@ -17,6 +17,8 @@ and restart your stable-diffusion-webui, then you can see the new tab "Image Bro
 Please be aware that when scanning a directory for the first time, the png-cache will be built. This can take several minutes, depending on the amount of images.
 
 ## Recent updates
+- Improved Search
+- Formatted EXIF display
 - Initial support for videos
 - --image-browser-tmp-db command line parameter to offload database operations to a different location
 - "All"-tab showing all the images from all tabs combined

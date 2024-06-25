@@ -738,24 +738,37 @@ def check_ext(ext):
                 break
     return found
 
-def exif_search(needle, haystack, use_regex, case_sensitive):
-    found = False
+def exif_search(needle, haystack, use_regex):
+    # Convert both haystack and needle to lowercase for case-insensitive search
+    haystack = haystack.lower()
+    needle = needle.lower()
+    
     if use_regex:
-        if case_sensitive:
-            pattern = re.compile(needle, re.DOTALL)
-        else:
-            pattern = re.compile(needle, re.DOTALL | re.IGNORECASE)
-        if pattern.search(haystack) is not None:
-            found = True
+        # Set regex flags for dotall (dot matches newline) and ignore case
+        flags = re.DOTALL | re.IGNORECASE
+        pattern = re.compile(needle, flags)
+        return pattern.search(haystack) is not None
     else:
-        if not case_sensitive:
-            haystack = haystack.lower()
-            needle = needle.lower()
-        if needle in haystack:
-            found = True
-    return found
+        # Function to parse and evaluate the logical expression
+        def parse_expression(expression):
+            # Split the expression by 'or' to handle OR logic first
+            or_parts = expression.split(' or ')
+            for part in or_parts:
+                # Split each part by 'and' to handle AND logic
+                and_parts = part.split(' and ')
+                # Check if all conditions in the AND part are satisfied
+                if all(
+                    (subpart[4:] not in haystack) if subpart.startswith('not ') 
+                    else (subpart in haystack) 
+                    for subpart in and_parts
+                ):
+                    return True
+            # Return False if none of the OR parts evaluate to True
+            return False
+        
+        return parse_expression(needle)
 
-def get_all_images(dir_name, sort_by, sort_order, keyword, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword, negative_prompt_search, use_regex, case_sensitive):
+def get_all_images(dir_name, sort_by, sort_order, keyword, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword, negative_prompt_search, use_regex):
     global current_depth
     logger.debug("get_all_images")
     current_depth = 0
@@ -791,7 +804,7 @@ def get_all_images(dir_name, sort_by, sort_order, keyword, tab_base_tag_box, img
                         print(f"Regex error: {e}")
                 if (use_regex and not regex_error) or not use_regex:
                     if negative_prompt_search == "Yes":
-                        fileinfos = [x for x in fileinfos if exif_search(exif_keyword, exif_cache[x[0]], use_regex, case_sensitive)]
+                        fileinfos = [x for x in fileinfos if exif_search(exif_keyword, exif_cache[x[0]], use_regex)]
                     else:
                         result = []
                         for file_info in fileinfos:
@@ -803,13 +816,13 @@ def get_all_images(dir_name, sort_by, sort_order, keyword, tab_base_tag_box, img
                             if negative_prompt_search == "Only":
                                 start_index = start_index + len(np)
                                 sub_string = file_exif[start_index:end_index].strip()
-                                if exif_search(exif_keyword, sub_string, use_regex, case_sensitive):
+                                if exif_search(exif_keyword, sub_string, use_regex):
                                     result.append(file_info)
                             else:
                                 sub_string = file_exif[start_index:end_index].strip()
                                 file_exif = file_exif.replace(sub_string, "")
                                 
-                                if exif_search(exif_keyword, file_exif, use_regex, case_sensitive):
+                                if exif_search(exif_keyword, file_exif, use_regex):
                                     result.append(file_info)
                         fileinfos = result
                     filenames = [finfo[0] for finfo in fileinfos]
@@ -981,7 +994,7 @@ def set_tooltip_info(image_list):
     image_browser_img_info_json = json.dumps(image_browser_img_info)
     return image_browser_img_info_json
 
-def get_image_page(img_path, page_index, filenames, keyword, sort_by, sort_order, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword, negative_prompt_search, use_regex, case_sensitive):
+def get_image_page(img_path, page_index, filenames, keyword, sort_by, sort_order, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword, negative_prompt_search, use_regex):
     logger.debug("get_image_page")
     if img_path == "":
         return [], page_index, [],  "", "",  "", 0, "", None, "", "[]", False, gr.update(visible=False)
@@ -991,7 +1004,7 @@ def get_image_page(img_path, page_index, filenames, keyword, sort_by, sort_order
         tempfile.tempdir = shared.opts.temp_dir
         
     img_path, _ = pure_path(img_path)
-    filenames = get_all_images(img_path, sort_by, sort_order, keyword, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword, negative_prompt_search, use_regex, case_sensitive)
+    filenames = get_all_images(img_path, sort_by, sort_order, keyword, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword, negative_prompt_search, use_regex)
     page_index = int(page_index)
     length = len(filenames)
     max_page_index = math.ceil(length / num_of_imgs_per_page)
@@ -1341,7 +1354,6 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
                                 exif_keyword_search = gr.Textbox(value="", label="EXIF keyword search")
                                 negative_prompt_search = gr.Radio(value="No", choices=["No", "Yes", "Only"], label="Search negative prompt", interactive=True)
                         with gr.Row(elem_classes="exif-search-panel"):
-                                case_sensitive = gr.Checkbox(value=False, label="case sensitive")
                                 use_regex = gr.Checkbox(value=False, label=r"regex - e.g. ^(?!.*Hires).*$")
                     with gr.Box() as ranking_filter_panel:
                         with gr.Row():
@@ -1724,7 +1736,7 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
     if standard_ui or others_dir:
         turn_page_switch.change(
             fn=get_image_page, 
-            inputs=[img_path, page_index, filenames, filename_keyword_search, sort_by, sort_order, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword_search, negative_prompt_search, use_regex, case_sensitive], 
+            inputs=[img_path, page_index, filenames, filename_keyword_search, sort_by, sort_order, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword_search, negative_prompt_search, use_regex], 
             outputs=[filenames, page_index, image_gallery, img_file_name, img_file_time, img_file_info, visible_img_num, warning_box, hidden, image_page_list, image_browser_img_info, video_checkbox, video_checkbox_panel],
             show_progress=show_progress_setting
         ).then(
