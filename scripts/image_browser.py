@@ -58,6 +58,12 @@ try:
 except ImportError:
     from modules import infotext_utils as sendto
 
+try:
+    from modules_forge import forge_version
+    forge = True
+except ImportError:
+    forge = False
+
 # Force reload wib_db, as it doesn't get reloaded otherwise, if an extension update is started from webui
 importlib.reload(wib_db)
 
@@ -91,6 +97,11 @@ js_dummy_return = None
 log_file = os.path.join(scripts.basedir(), "image_browser.log")
 optimized_cache = None
 show_progress_setting = True
+gradio_min = "3.23.0"
+gradio3_new_gallery_syntax = "3.39.0"
+gradio4 = "4.0.0"
+gradio4_new_gallery_syntax = "4.16.0"
+temp_temp = os.path.join(scripts.basedir(), "temp")
 
 db_version = wib_db.check()
 
@@ -152,6 +163,15 @@ class ImageBrowserTab():
         return f"Name: {self.name} / Path: {self.path} / Base tag: {self.base_tag} / Seen base tags: {self.seen_base_tags}"
 
 tabs_list = [ImageBrowserTab(tab) for tab in tabs_list]
+
+# Set temp_dir from webui settings, so gradio uses it
+if shared.opts.temp_dir != "":
+    tempfile.tempdir = shared.opts.temp_dir
+    if forge:
+        # Workaround for forge: Its ui_tempdir seems to not use the temp_dir configuration
+        # The following makes sure, that onchange triggers after setting temp_dir
+        shared.opts.temp_dir = temp_temp
+        shared.opts.temp_dir = tempfile.tempdir
 
 debug_level_types = ["none", "warning log", "debug log", "javascript log", "capture logs to file"]
 
@@ -998,10 +1018,6 @@ def get_image_page(img_path, page_index, filenames, keyword, sort_by, sort_order
     logger.debug("get_image_page")
     if img_path == "":
         return [], page_index, [],  "", "",  "", 0, "", None, "", "[]", False, gr.update(visible=False)
-
-    # Set temp_dir from webui settings, so gradio uses it
-    if shared.opts.temp_dir != "":
-        tempfile.tempdir = shared.opts.temp_dir
         
     img_path, _ = pure_path(img_path)
     filenames = get_all_images(img_path, sort_by, sort_order, keyword, tab_base_tag_box, img_path_depth, ranking_filter, ranking_filter_min, ranking_filter_max, aes_filter_min, aes_filter_max, exif_keyword, negative_prompt_search, use_regex)
@@ -1058,10 +1074,14 @@ def show_image_info(tab_base_tag_box, num, page_index, filenames, turn_page_swit
     video_checkbox_panel = False
     video_checkbox = False
 
-    gradio_new = "4.0.0"
-    if version.parse(gr.__version__) < version.parse(gradio_new):
+    if version.parse(gr.__version__) < version.parse(gradio4):
+        # Version for Gradio 3
         image_gallery = [image["name"] for image in image_gallery]
+    elif version.parse(gr.__version__) >= version.parse(gradio4_new_gallery_syntax):
+        # Most up-to-date version
+        image_gallery = [image[0] for image in image_gallery]
     else:
+        # Version for Gradio 4.0 - 4.15
         image_gallery = [image_gallery_element.image.path for image_gallery_element in image_gallery.root]
 
     if len(filenames) == 0:
@@ -1324,10 +1344,14 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
                         with gr.Row():
                             video_element = gr.Video(visible=False, width=opts.image_browser_video_x, height=opts.image_browser_video_y)
                     with gr.Row():
-                        gradio_new = "3.39.0"
-                        if version.parse(gr.__version__) < version.parse(gradio_new):
+                        if version.parse(gr.__version__) < version.parse(gradio3_new_gallery_syntax):
+                            # Version for Gradio 3
                             image_gallery = gr.Gallery(show_label=False, elem_id=f"{tab.base_tag}_image_browser_gallery").style(columns=opts.image_browser_page_columns, height=("max-content" if opts.image_browser_height_auto else None))
+                        elif version.parse(gr.__version__) >= version.parse(gradio4_new_gallery_syntax):
+                            # Most up-to-date version
+                            image_gallery = gr.Gallery(show_label=False, elem_id=f"{tab.base_tag}_image_browser_gallery", interactive=False, columns=opts.image_browser_page_columns, height=("max-content" if opts.image_browser_height_auto else None))
                         else:
+                            # Version for Gradio 4.0 - 4.15
                             image_gallery = gr.Gallery(show_label=False, elem_id=f"{tab.base_tag}_image_browser_gallery", columns=opts.image_browser_page_columns, height=("max-content" if opts.image_browser_height_auto else None))
                     if opts.image_browser_video_pos == "Below":
                         with gr.Row():
@@ -1814,9 +1838,8 @@ def on_ui_tabs():
     num_of_imgs_per_page = int(opts.image_browser_page_columns * opts.image_browser_page_rows)
     loads_files_num = int(opts.image_browser_pages_perload * num_of_imgs_per_page)
     with gr.Blocks(analytics_enabled=False) as image_browser:
-        gradio_needed = "3.23.0"
-        if version.parse(gr.__version__) < version.parse(gradio_needed):
-            gr.HTML(f'<p style="color: red; font-weight: bold;">You are running Gradio version {gr.__version__}. This version of the extension requires at least Gradio version {gradio_needed}.</p><p style="color: red; font-weight: bold;">For more details see <a href="https://github.com/AlUlkesh/stable-diffusion-webui-images-browser/issues/116#issuecomment-1493259585" target="_blank">https://github.com/AlUlkesh/stable-diffusion-webui-images-browser/issues/116#issuecomment-1493259585</a></p>')
+        if version.parse(gr.__version__) < version.parse(gradio_min):
+            gr.HTML(f'<p style="color: red; font-weight: bold;">You are running Gradio version {gr.__version__}. This version of the extension requires at least Gradio version {gradio_min}.</p><p style="color: red; font-weight: bold;">For more details see <a href="https://github.com/AlUlkesh/stable-diffusion-webui-images-browser/issues/116#issuecomment-1493259585" target="_blank">https://github.com/AlUlkesh/stable-diffusion-webui-images-browser/issues/116#issuecomment-1493259585</a></p>')
         else:
             with gr.Tabs(elem_id="image_browser_tabs_container") as tabs:
                 js_dummy_return = gr.Textbox(interactive=False, visible=False)
