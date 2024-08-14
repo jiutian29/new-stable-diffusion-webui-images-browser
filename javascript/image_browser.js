@@ -12,7 +12,11 @@ onUiLoaded(image_browser_start_it_up)
 async function image_browser_wait_for_webui() { 
     if (image_browser_debug) console.log("image_browser_wait_for_webui:start")
     await image_browser_delay(500)
-    sd_model = gradioApp().getElementById("setting_sd_model_checkpoint")
+    let sd_model = gradioApp().getElementById("setting_sd_model_checkpoint")
+    if (!sd_model) {
+        // Forge workaround
+        sd_model = gradioApp().getElementsByClassName("model_selection")[0]
+    }
     if (!sd_model.querySelector(".eta-bar")) {
         image_browser_webui_ready = true
         image_browser_start()
