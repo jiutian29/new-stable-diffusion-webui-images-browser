@@ -370,12 +370,6 @@ def ranking_filter_settings(page_index, turn_page_switch, ranking_filter):
     page_index = 1
     return page_index, turn_page_switch + 1, gr.update(interactive=interactive), gr.update(interactive=interactive)
 
-def warning_box_visibility(warning_box):
-    if warning_box == "":
-        return gr.update(value=warning_box, visible=False)
-    else:
-        return gr.update(value=warning_box, visible=True)
-
 def reduplicative_file_move(src, dst):
     def same_name_file(basename, path):
         name, ext = os.path.splitext(basename)
@@ -1048,7 +1042,7 @@ def get_image_page(img_path, page_index, filenames, keyword, sort_by, sort_order
     load_info += f"{length} images in this directory, divided into {int((length + 1) // num_of_imgs_per_page  + 1)} pages"
     load_info += "</div>"
 
-    return filenames, gr.update(value=page_index, label=f"Page Index ({page_index}/{max_page_index})"), thumbnail_list,  "", "",  "", visible_num, load_info, None, json.dumps(image_list), image_browser_img_info, False, gr.update(visible=False)
+    return filenames, gr.update(value=page_index, label=f"Page Index ({page_index}/{max_page_index})"), thumbnail_list,  "", "",  "", visible_num, gr.update(value=load_info, visible=bool(load_info)), None, json.dumps(image_list), image_browser_img_info, False, gr.update(visible=False)
 
 def get_current_file(tab_base_tag_box, num, page_index, filenames):
     file = filenames[int(num) + int((page_index - 1) * num_of_imgs_per_page)]
@@ -1134,11 +1128,11 @@ def warning_style(warning):
 
 def change_dir_textbox(img_dir, path_recorder, load_switch, img_path_browser, img_path_depth):
     warning, main_panel, img_path_browser, path_recorder, load_switch, img_path, img_path_depth = change_dir("textbox", img_dir, path_recorder, load_switch, img_path_browser, img_path_depth)
-    return warning, gr.update(visible=main_panel), img_path_browser, path_recorder, load_switch, img_path, img_path_depth
+    return gr.update(value=warning, visible=bool(warning)), gr.update(visible=main_panel), img_path_browser, path_recorder, load_switch, img_path, img_path_depth
 
 def change_dir_dropdown(img_dir, path_recorder, load_switch, img_path_browser, img_path_depth):
     warning, main_panel, img_path_browser, path_recorder, load_switch, img_path, img_path_depth = change_dir("dropdown", img_dir, path_recorder, load_switch, img_path_browser, img_path_depth)
-    return warning, gr.update(visible=main_panel), img_path_browser, path_recorder, load_switch, img_path, img_path_depth
+    return gr.update(value=warning, visible=bool(warning)), gr.update(visible=main_panel), img_path_browser, path_recorder, load_switch, img_path, img_path_depth
 
 def change_dir(change_dir_type, img_dir, path_recorder, load_switch, img_path_browser, img_path_depth):
     warning = ""
@@ -1617,12 +1611,6 @@ def create_tab(tab: ImageBrowserTab, current_gr_tab: gr.Tab):
         fn=ranking_filter_settings,
         inputs=[page_index, turn_page_switch, ranking_filter],
         outputs=[page_index, turn_page_switch, ranking_filter_min, ranking_filter_max],
-        show_progress=show_progress_setting
-    )
-    warning_box.change(
-        fn=warning_box_visibility,
-        inputs=[warning_box],
-        outputs=[warning_box],
         show_progress=show_progress_setting
     )
     img_file_info_format.change(
