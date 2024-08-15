@@ -187,9 +187,9 @@ def split_exif_data(info):
     key_values = "0: 0"
     key_value_pairs = []
 
-    def parse_value_pairs(kv_str, key_prefix=''):
+    def parse_value_pairs(kv_str, key_prefix=""):
         # Regular expression pattern to match key-value pairs, including multiline prompts
-        pattern = r'((?:\w+ )?(?:Prompt|Negative Prompt)|[^:]+):\s*((?:[^,]+(?:,(?![^:]+:))?)+)'
+        pattern = r"((?:\w+ )?(?:Prompt|Negative Prompt)|[^:]+):\s*((?:[^,]+(?:,(?![^:]+:))?)+)"
 
         # Find all matches
         matches = re.findall(pattern, kv_str, re.IGNORECASE | re.DOTALL)
@@ -201,26 +201,26 @@ def split_exif_data(info):
                 result[key] = value
                 current_prompt = key
             else:
-                pk_values = [v.strip() for v in key.split(',') if v.strip()]
+                pk_values = [v.strip() for v in key.split(",") if v.strip()]
                 result[current_prompt] += f",{','.join(pk_values[:-1])}"
                 current_prompt = pk_values[-1]
-                result[current_prompt] = ','.join([v.strip() for v in value.split(',') if v.strip()])
+                result[current_prompt] = ",".join([v.strip() for v in value.split(",") if v.strip()])
 
             return current_prompt
 
         def process_regular_key(key, value, current_prompt):
-            values = [v.strip() for v in value.split(',') if v.strip()]
+            values = [v.strip() for v in value.split(",") if v.strip()]
             if current_prompt is not None:
-                pk_values = [v.strip() for v in key.split(',') if v.strip()]
+                pk_values = [v.strip() for v in key.split(",") if v.strip()]
                 result[current_prompt] += f",{','.join(pk_values[:-1])}"
                 current_prompt = None
                 key = pk_values[-1]
-            result[key] = values[0] if len(values) == 1 else ','.join(values)
+            result[key] = values[0] if len(values) == 1 else ",".join(values)
 
             return current_prompt
 
         for key, value in matches:
-            key = key.strip(' ,')
+            key = key.strip(" ,")
             value = value.strip()
 
             if "prompt" in key.lower() or "prompt" in value.lower():
@@ -230,12 +230,12 @@ def split_exif_data(info):
 
         # Print the resulting key-value pairs
         for key, value in result.items():
-            value = value.strip(' ,')
+            value = value.strip(" ,")
             if value.startswith('"') and value.endswith('"'):
                 value = value[1:-1]
-                parse_value_pairs(value, f"{key_prefix} - {key}" if key_prefix != '' else key)
+                parse_value_pairs(value, f"{key_prefix} - {key}" if key_prefix != "" else key)
 
-            key_value_pairs.append((f"{key_prefix} - {key}" if key_prefix != '' else key, value))
+            key_value_pairs.append((f"{key_prefix} - {key}" if key_prefix != "" else key, value))
 
     if info != "0":
         info_list = info.split("\n")
@@ -253,6 +253,7 @@ def split_exif_data(info):
                 else:
                     # multiline prompts
                     prompt = f"{prompt}\n{info_item}"
+
     if key_values != "":
         pattern = r'(\w+(?:\s+\w+)*?):\s*((?:"[^"]*"|[^,])+)(?:,\s*|$)'
         matches = re.findall(pattern, key_values)
@@ -260,7 +261,7 @@ def split_exif_data(info):
 
         # Save resulting key-value pairs
         for key, value in result.items():
-            value = value.strip(' ,')
+            value = value.strip(" ,")
             if value.startswith('"') and value.endswith('"'):
                 value = value[1:-1]
                 parse_value_pairs(value, key)
