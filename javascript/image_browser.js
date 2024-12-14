@@ -171,6 +171,14 @@ async function image_browser_turnpage(tab_base_tag) {
     } catch (e) {
         console.error(e)
     }
+
+    // Scroll to top of grid
+    try {
+        const gridWrapElement = document.getElementById(tab_base_tag + "_image_browser_gallery").querySelector("div.grid-wrap")
+        gridWrapElement.scrollTop = 0
+        gridWrapElement.scrollLeft= 0
+    } catch (e) { }
+
     if (image_browser_debug) console.log("image_browser_turnpage:end")
 }
 
