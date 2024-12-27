@@ -15,7 +15,7 @@ div[id$='_control_image_browser_page_index'] {
   margin-top: -20px !important;
   display: grid;
   justify-content: end;
-  background: #ff0;
+  background: #ff0 !important;
 }
 button[id$='_control_image_browser_refresh_index']{
   align-self: center !important;
@@ -24,11 +24,12 @@ button[id$='_control_image_browser_refresh_index']{
 }
 button[id$='_image_browser_del_img_btn'] {
   margin-top: calc(var(--body-text-size) * var(--line-sm));
-  color: #f00;
+  color: #f00 !important;
 }
 
 #tab_image_browser .no-gap-top {
   margin-top: calc(var(--layout-gap) * -1);
+  color: #00f !important;
 }
 
 #tab_image_browser .mb-0 {
@@ -44,6 +45,7 @@ button[id$='_image_browser_del_img_btn'] {
 #tab_image_browser button[id$='_control_image_browser_next_page'],
 #tab_image_browser button[id$='_control_image_browser_end_page'] {
   cursor: pointer !important;
+  background: #f00 !important;
 }
 
 #tab_image_browser div[id$='_control_image_browser_page_index'],
